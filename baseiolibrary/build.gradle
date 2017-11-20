@@ -40,3 +40,16 @@ dependencies {
 repositories {
     mavenCentral()
 }
+
+//在gradle -> other 中选择 publishRelease
+task publishRelease(dependsOn: 'assembleRelease') << {
+    def today = new Date().format('yyyyMMdd');
+    def id = android.defaultConfig.applicationId
+//    def prex = id.substring(id.lastIndexOf(".") + 1)
+    copy {
+        from('build/outputs/aar/')
+        into('release/')
+        include('*release.aar')
+        rename('-', "-$android.defaultConfig.versionName-$today-")
+    }
+}
