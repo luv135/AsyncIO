@@ -4,21 +4,18 @@ import com.unistrong.luowei.commlib.Log
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.*
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.ThreadPoolExecutor
-import java.util.concurrent.TimeUnit
 
 /**
  * Created by luowei on 2017/9/14.
  *
  */
-abstract class BaseIO {
+class BaseIO {
     companion object {
-        val DEBUG = false
+        val DEBUG = true
     }
 
     private var isRun: Boolean = false
-    private val executor = ThreadPoolExecutor(3, 10, 5, TimeUnit.SECONDS, LinkedBlockingQueue())
+//    private val executor = ThreadPoolExecutor(3, 10, 5, TimeUnit.SECONDS, LinkedBlockingQueue())
 
     fun start(inputStream: InputStream, outputStream: OutputStream, callback: (buffer: ByteArray, size: Int) -> Unit) {
         isRun = true
@@ -28,7 +25,7 @@ abstract class BaseIO {
 
     private var readThread: ReadThread? = null
     private var writeThread: WriteThread? = null
-    open fun stop() {
+    fun stop() {
         isRun = false
         readThread?.close()
 //        readThread?.interrupt()
@@ -42,13 +39,13 @@ abstract class BaseIO {
 
     private fun startWriteThread(outputStream: OutputStream, readThread: ReadThread): WriteThread {
         val writeThread = WriteThread(outputStream, readThread)
-        executor.execute(writeThread)
+        writeThread.start()
         return writeThread
     }
 
     private fun startReadThread(inputStream: InputStream, callback: (buffer: ByteArray, size: Int) -> Unit): ReadThread {
         val readThread = ReadThread(inputStream, callback)
-        executor.execute(readThread)
+        readThread.start()
         return readThread
     }
 
@@ -65,10 +62,10 @@ abstract class BaseIO {
             if (DEBUG) Log.d("start write..")
             while (isRun) {
                 while (queen.isEmpty()) {
-                    synchronized(objecz) {
+                    synchronized(objecz, {
                         if (DEBUG) Log.d("wait")
                         objecz.wait()
-                    }
+                    })
                 }
                 val poll = queen.poll()
                 try {
@@ -79,7 +76,7 @@ abstract class BaseIO {
                     }
                     poll.callback?.invoke(buffer != null, if (buffer != null) buffer else poll.buffer)
                 } catch (e: Exception) {
-                    if(DEBUG) Log.e("写线程异常${e.printStackTrace()}")
+                    if (DEBUG) Log.e("写线程异常${e.printStackTrace()}")
                     this@BaseIO.stop()
                 }
             }
@@ -98,9 +95,9 @@ abstract class BaseIO {
                 queen.offer(packet)
                 rt = true
             }
-            synchronized(objecz) {
+            synchronized(objecz, {
                 objecz.notify()
-            }
+            })
             return rt
         }
 
@@ -134,10 +131,11 @@ abstract class BaseIO {
                         if (DEBUG) Log.d("read $readSize")
                         callback.invoke(readBuffer, readSize)
                     } else {
-//                         if(DEBUG)Log.d("read size <=0")
+                        if (DEBUG) Log.d("read size <=0")
+                        if(readSize==-1) throw IllegalArgumentException("end of stream")
                     }
                 } catch (e: Exception) {
-                    if(DEBUG) Log.e("读线程异常${e.printStackTrace()}")
+                    if (DEBUG) Log.e("读线程异常${e.printStackTrace()}")
                     this@BaseIO.stop()
                 }
             }
